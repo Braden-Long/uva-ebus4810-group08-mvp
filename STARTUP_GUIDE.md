@@ -78,7 +78,7 @@ Open your browser to: **http://localhost:3000**
 - Password: `patient123`
 
 **Provider Portal:**
-- Email: `emilia.wong@docclock.health`
+- Email: `sarah.mitchell@docclock.health`
 - Password: `provider123`
 
 💡 **Tip:** Click "Fill demo credentials" to auto-fill login forms

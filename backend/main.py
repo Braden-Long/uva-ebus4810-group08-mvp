@@ -167,14 +167,14 @@ def bootstrap_users() -> None:
             "password": "patient123",
         },
         {
-            "full_name": "Dr. Emilia Wong",
-            "email": "emilia.wong@docclock.health",
+            "full_name": "Dr. Sarah Mitchell",
+            "email": "sarah.mitchell@docclock.health",
             "role": UserRole.provider,
             "password": "provider123",
         },
         {
-            "full_name": "Dr. Rishi Patel",
-            "email": "rishi.patel@docclock.health",
+            "full_name": "Dr. James Cooper",
+            "email": "james.cooper@docclock.health",
             "role": UserRole.provider,
             "password": "provider123",
         },
@@ -223,7 +223,7 @@ def seed_appointments() -> None:
     sample_data = [
         {
             "patient_email": "jordan@docclock.health",
-            "provider_email": "emilia.wong@docclock.health",
+            "provider_email": "sarah.mitchell@docclock.health",
             "appointment_time": now + timedelta(hours=4),
             "reason": "Chronic migraine follow-up",
             "location": "UVA Neurology - Pavilion II",
@@ -234,7 +234,7 @@ def seed_appointments() -> None:
         },
         {
             "patient_email": "ava@docclock.health",
-            "provider_email": "rishi.patel@docclock.health",
+            "provider_email": "james.cooper@docclock.health",
             "appointment_time": now + timedelta(days=1, hours=2),
             "reason": "Post-op wound check",
             "location": "UVA Surgical Center",
@@ -245,7 +245,7 @@ def seed_appointments() -> None:
         },
         {
             "patient_email": "jordan@docclock.health",
-            "provider_email": "emilia.wong@docclock.health",
+            "provider_email": "sarah.mitchell@docclock.health",
             "appointment_time": now + timedelta(days=2, hours=3),
             "reason": "Dermatology consult",
             "location": "UVA Dermatology",

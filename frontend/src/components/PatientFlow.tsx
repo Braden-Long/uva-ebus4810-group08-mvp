@@ -16,15 +16,15 @@ interface PatientFlowProps {
 
 const providerDirectory = [
   {
-    name: 'Dr. Emilia Wong',
+    name: 'Dr. Sarah Mitchell',
     location: 'UVA Neurology - Pavilion II',
   },
   {
-    name: 'Dr. Rishi Patel',
+    name: 'Dr. James Cooper',
     location: 'UVA Surgical Center',
   },
   {
-    name: 'Dr. Hanna Ruiz',
+    name: 'Dr. Rachel Thompson',
     location: 'Virtual Care Team',
   },
 ]

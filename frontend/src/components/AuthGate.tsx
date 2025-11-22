@@ -10,7 +10,7 @@ type AuthMode = 'login' | 'register'
 
 const credentialHints: Record<UserRole, { email: string; password: string }> = {
   patient: { email: 'jordan@docclock.health', password: 'patient123' },
-  provider: { email: 'emilia.wong@docclock.health', password: 'provider123' },
+  provider: { email: 'sarah.mitchell@docclock.health', password: 'provider123' },
 }
 
 const AuthGate = ({ onAuthenticated }: AuthGateProps) => {
@@ -66,11 +66,11 @@ const AuthGate = ({ onAuthenticated }: AuthGateProps) => {
     const creds = credentialHints[role]
     setSelectedRole(role)
     setMode('login')
-    setFormValues({
-      fullName: role === 'patient' ? 'Jordan Carter' : 'Dr. Emilia Wong',
-      email: creds.email,
-      password: creds.password,
-    })
+            setFormValues({
+              fullName: role === 'patient' ? 'Jordan Carter' : 'Dr. Sarah Mitchell',
+              email: creds.email,
+              password: creds.password,
+            })
     setError(null)
   }
 
@@ -138,7 +138,7 @@ const AuthGate = ({ onAuthenticated }: AuthGateProps) => {
                   onChange={(event) =>
                     setFormValues((prev) => ({ ...prev, fullName: event.target.value }))
                   }
-                  placeholder={selectedRole === 'patient' ? 'Jordan Carter' : 'Dr. Emilia Wong'}
+                          placeholder={selectedRole === 'patient' ? 'Jordan Carter' : 'Dr. Sarah Mitchell'}
                   required
                 />
               </label>
