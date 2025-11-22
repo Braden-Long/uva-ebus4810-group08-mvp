@@ -1,76 +1,44 @@
-import json
 import random
 from datetime import datetime, timedelta
-from enum import Enum
-from hashlib import sha256
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy.orm import Session
+from passlib.context import CryptContext
 
-DATA_DIR = Path(__file__).parent / "data"
-DATA_DIR.mkdir(exist_ok=True)
-USERS_FILE = DATA_DIR / "users.json"
-APPOINTMENTS_FILE = DATA_DIR / "appointments.json"
+from database import engine, get_db, Base
+from models import User, Appointment, UserRole, RiskLevel, AppointmentStatus
 
-app = FastAPI(title="DocClock API", version="1.1.0")
+# Create database tables
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="DocClock API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # TODO: Restrict in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-class UserRole(str, Enum):
-    patient = "patient"
-    provider = "provider"
+# Password hashing context (using bcrypt instead of SHA256)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-class RiskLevel(str, Enum):
-    none = "none"
-    low = "low"
-    medium = "medium"
-    high = "high"
-
-
-class AppointmentStatus(str, Enum):
-    scheduled = "Scheduled"
-    rescheduled = "Rescheduled"
-    checked_in = "CheckedIn"
-    completed = "Completed"
-    cancelled = "Cancelled"
-
-
-class UserRecord(BaseModel):
-    id: str
-    full_name: str
-    email: EmailStr
-    role: UserRole
-    password_hash: str
-    created_at: datetime
-
-    def public(self) -> "UserPublic":
-        return UserPublic(
-            id=self.id,
-            full_name=self.full_name,
-            email=self.email,
-            role=self.role,
-            created_at=self.created_at,
-        )
-
-
+# Pydantic models for API requests/responses
 class UserPublic(BaseModel):
     id: str
     full_name: str
     email: EmailStr
     role: UserRole
     created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class RegisterPayload(BaseModel):
@@ -119,41 +87,50 @@ class AppointmentUpdate(BaseModel):
     provider_user_id: Optional[str] = None
 
 
-class Appointment(AppointmentBase):
+class AppointmentResponse(BaseModel):
     id: str
+    patient_name: str
+    provider_name: str
+    patient_user_id: Optional[str]
+    provider_user_id: Optional[str]
+    appointment_time: datetime
+    reason: str
+    location: str
+    channel: str
+    status: AppointmentStatus
+    risk_level: RiskLevel
+    notes: Optional[str]
+
+    class Config:
+        from_attributes = True
 
 
-users_store: Dict[str, UserRecord] = {}
-appointments_store: Dict[str, Appointment] = {}
-
-
+# Helper functions
 def hash_password(password: str) -> str:
-    return sha256(password.encode("utf-8")).hexdigest()
+    """Hash password using bcrypt"""
+    return pwd_context.hash(password)
 
 
-def save_users() -> None:
-    USERS_FILE.write_text(
-        json.dumps([user.model_dump(mode="json") for user in users_store.values()], indent=2),
-        encoding="utf-8",
-    )
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify password against hash"""
+    return pwd_context.verify(plain_password, hashed_password)
 
 
-def load_users() -> None:
-    users_store.clear()
-    if not USERS_FILE.exists():
+def get_user_by_email(db: Session, email: str) -> Optional[User]:
+    """Get user by email (case-insensitive)"""
+    return db.query(User).filter(User.email == email.lower()).first()
+
+
+def bootstrap_demo_data(db: Session):
+    """Create demo users and appointments if database is empty"""
+    # Check if users already exist
+    if db.query(User).count() > 0:
         return
-    data = json.loads(USERS_FILE.read_text(encoding="utf-8"))
-    for record in data:
-        record["created_at"] = datetime.fromisoformat(record["created_at"])
-        users_store[record["id"]] = UserRecord(**record)
 
-
-def bootstrap_users() -> None:
-    load_users()
-    if users_store:
-        return
     now = datetime.utcnow()
-    sample_users = [
+
+    # Create demo users
+    demo_users = [
         {
             "full_name": "Jordan Carter",
             "email": "jordan@docclock.health",
@@ -179,51 +156,33 @@ def bootstrap_users() -> None:
             "password": "provider123",
         },
     ]
-    for sample in sample_users:
-        user = UserRecord(
+
+    user_objects = []
+    for user_data in demo_users:
+        user = User(
             id=str(uuid4()),
-            full_name=sample["full_name"],
-            email=sample["email"],
-            role=sample["role"],
-            password_hash=hash_password(sample["password"]),
+            full_name=user_data["full_name"],
+            email=user_data["email"].lower(),
+            role=user_data["role"],
+            password_hash=hash_password(user_data["password"]),
+            email_verified=True,  # Demo accounts are pre-verified
             created_at=now,
         )
-        users_store[user.id] = user
-    save_users()
+        db.add(user)
+        user_objects.append(user)
 
+    db.commit()
 
-def save_appointments() -> None:
-    APPOINTMENTS_FILE.write_text(
-        json.dumps([appt.model_dump(mode="json") for appt in appointments_store.values()], indent=2),
-        encoding="utf-8",
-    )
+    # Create demo appointments
+    jordan = get_user_by_email(db, "jordan@docclock.health")
+    ava = get_user_by_email(db, "ava@docclock.health")
+    sarah = get_user_by_email(db, "sarah.mitchell@docclock.health")
+    james = get_user_by_email(db, "james.cooper@docclock.health")
 
-
-def load_appointments() -> None:
-    appointments_store.clear()
-    if not APPOINTMENTS_FILE.exists():
-        return
-    data = json.loads(APPOINTMENTS_FILE.read_text(encoding="utf-8"))
-    for record in data:
-        dt = datetime.fromisoformat(record["appointment_time"])
-        # Remove timezone info to keep all datetimes naive
-        if dt.tzinfo is not None:
-            dt = dt.replace(tzinfo=None)
-        record["appointment_time"] = dt
-        appointments_store[record["id"]] = Appointment(**record)
-
-
-def user_by_email(email: str) -> Optional[UserRecord]:
-    target = email.lower()
-    return next((user for user in users_store.values() if user.email.lower() == target), None)
-
-
-def seed_appointments() -> None:
-    now = datetime.utcnow()
-    sample_data = [
+    demo_appointments = [
         {
-            "patient_email": "jordan@docclock.health",
-            "provider_email": "sarah.mitchell@docclock.health",
+            "patient": jordan,
+            "provider": sarah,
             "appointment_time": now + timedelta(hours=4),
             "reason": "Chronic migraine follow-up",
             "location": "UVA Neurology - Pavilion II",
@@ -233,8 +192,8 @@ def seed_appointments() -> None:
             "notes": "Missed last two appointments, commute > 1 hr",
         },
         {
-            "patient_email": "ava@docclock.health",
-            "provider_email": "james.cooper@docclock.health",
+            "patient": ava,
+            "provider": james,
             "appointment_time": now + timedelta(days=1, hours=2),
             "reason": "Post-op wound check",
             "location": "UVA Surgical Center",
@@ -244,8 +203,8 @@ def seed_appointments() -> None:
             "notes": "Confirmed via SMS",
         },
         {
-            "patient_email": "jordan@docclock.health",
-            "provider_email": "sarah.mitchell@docclock.health",
+            "patient": jordan,
+            "provider": sarah,
             "appointment_time": now + timedelta(days=2, hours=3),
             "reason": "Dermatology consult",
             "location": "UVA Dermatology",
@@ -255,36 +214,38 @@ def seed_appointments() -> None:
             "notes": "Transit reliability score low",
         },
     ]
-    for sample in sample_data:
-        patient = user_by_email(sample["patient_email"])
-        provider = user_by_email(sample["provider_email"])
+
+    for appt_data in demo_appointments:
         appointment = Appointment(
             id=str(uuid4()),
-            patient_name=patient.full_name if patient else sample["patient_email"],
-            provider_name=provider.full_name if provider else sample["provider_email"],
-            appointment_time=sample["appointment_time"],
-            reason=sample["reason"],
-            location=sample["location"],
-            channel=sample["channel"],
-            status=sample["status"],
-            risk_level=sample["risk"],
-            notes=sample["notes"],
-            patient_user_id=patient.id if patient else None,
-            provider_user_id=provider.id if provider else None,
+            patient_name=appt_data["patient"].full_name,
+            provider_name=appt_data["provider"].full_name,
+            patient_user_id=appt_data["patient"].id,
+            provider_user_id=appt_data["provider"].id,
+            appointment_time=appt_data["appointment_time"],
+            reason=appt_data["reason"],
+            location=appt_data["location"],
+            channel=appt_data["channel"],
+            status=appt_data["status"],
+            risk_level=appt_data["risk"],
+            notes=appt_data["notes"],
+            created_at=now,
+            updated_at=now,
         )
-        appointments_store[appointment.id] = appointment
-    save_appointments()
+        db.add(appointment)
+
+    db.commit()
 
 
-def bootstrap_appointments() -> None:
-    load_appointments()
-    if appointments_store:
-        return
-    seed_appointments()
-
-
-bootstrap_users()
-bootstrap_appointments()
+# API Routes
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database with demo data on startup"""
+    db = next(get_db())
+    try:
+        bootstrap_demo_data(db)
+    finally:
+        db.close()
 
 
 @app.get("/")
@@ -293,107 +254,131 @@ async def root():
 
 
 @app.get("/health")
-async def health():
+async def health(db: Session = Depends(get_db)):
     return {
         "status": "healthy",
-        "appointments_cached": len(appointments_store),
-        "users_cached": len(users_store),
+        "appointments_count": db.query(Appointment).count(),
+        "users_count": db.query(User).count(),
     }
 
 
 @app.post("/api/auth/register", response_model=UserPublic, status_code=201)
-async def register_user(payload: RegisterPayload):
+async def register_user(payload: RegisterPayload, db: Session = Depends(get_db)):
+    """Register a new user (patient or provider)"""
     email = payload.email.lower()
-    if user_by_email(email):
+
+    # Check if user already exists
+    if get_user_by_email(db, email):
         raise HTTPException(status_code=409, detail="Email already registered")
-    user = UserRecord(
+
+    # Create new user
+    user = User(
         id=str(uuid4()),
         full_name=payload.full_name.strip(),
         email=email,
         role=payload.role,
         password_hash=hash_password(payload.password),
+        email_verified=False,  # Will be verified via email in next commit
         created_at=datetime.utcnow(),
     )
-    users_store[user.id] = user
-    save_users()
-    return user.public()
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return user
 
 
 @app.post("/api/auth/login", response_model=UserPublic)
-async def login_user(payload: LoginPayload):
-    user = user_by_email(payload.email)
+async def login_user(payload: LoginPayload, db: Session = Depends(get_db)):
+    """Authenticate user and return user info"""
+    user = get_user_by_email(db, payload.email)
+
+    # Check user exists and role matches
     if not user or user.role != payload.role:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    if user.password_hash != hash_password(payload.password):
+
+    # Verify password
+    if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return user.public()
+
+    # TODO: In next commit, check email_verified status
+    # if not user.email_verified:
+    #     raise HTTPException(status_code=403, detail="Email not verified")
+
+    return user
 
 
-@app.get("/api/appointments", response_model=List[Appointment])
+@app.get("/api/appointments", response_model=List[AppointmentResponse])
 async def list_appointments(
     status: Optional[AppointmentStatus] = None,
     risk: Optional[RiskLevel] = None,
     patient_id: Optional[str] = None,
     provider_id: Optional[str] = None,
+    db: Session = Depends(get_db),
 ):
-    results = list(appointments_store.values())
+    """List appointments with optional filters"""
+    query = db.query(Appointment)
+
     if status:
-        results = [appt for appt in results if appt.status == status]
+        query = query.filter(Appointment.status == status)
     if risk:
-        results = [appt for appt in results if appt.risk_level == risk]
+        query = query.filter(Appointment.risk_level == risk)
     if patient_id:
-        results = [appt for appt in results if appt.patient_user_id == patient_id]
+        query = query.filter(Appointment.patient_user_id == patient_id)
     if provider_id:
-        results = [appt for appt in results if appt.provider_user_id == provider_id]
-    
-    # Sort safely by converting all datetimes to naive if needed
-    def safe_sort_key(appt):
-        dt = appt.appointment_time
-        if dt.tzinfo is not None:
-            return dt.replace(tzinfo=None)
-        return dt
-    
-    return sorted(results, key=safe_sort_key)
+        query = query.filter(Appointment.provider_user_id == provider_id)
+
+    # Sort by appointment time
+    appointments = query.order_by(Appointment.appointment_time).all()
+    return appointments
 
 
-@app.get("/api/appointments/{appointment_id}", response_model=Appointment)
-async def get_appointment(appointment_id: str):
-    appointment = appointments_store.get(appointment_id)
+@app.get("/api/appointments/{appointment_id}", response_model=AppointmentResponse)
+async def get_appointment(appointment_id: str, db: Session = Depends(get_db)):
+    """Get a single appointment by ID"""
+    appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
+
     return appointment
 
 
-def assert_user_exists(user_id: str, expected_role: UserRole) -> None:
-    user = users_store.get(user_id)
-    if not user or user.role != expected_role:
-        raise HTTPException(status_code=400, detail=f"{expected_role.value.title()} does not exist")
-
-
-@app.post("/api/appointments", response_model=Appointment, status_code=201)
-async def create_appointment(payload: AppointmentCreate):
+@app.post("/api/appointments", response_model=AppointmentResponse, status_code=201)
+async def create_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)):
+    """Create a new appointment"""
     appointment_data = payload.model_dump()
-    
+
+    # Validate and link patient user
     if payload.patient_user_id:
-        assert_user_exists(payload.patient_user_id, UserRole.patient)
-        patient = users_store[payload.patient_user_id]
+        patient = db.query(User).filter(
+            User.id == payload.patient_user_id,
+            User.role == UserRole.patient
+        ).first()
+        if not patient:
+            raise HTTPException(status_code=400, detail="Patient does not exist")
         appointment_data["patient_name"] = patient.full_name
-    
+
+    # Validate and link provider user
     if payload.provider_user_id:
-        assert_user_exists(payload.provider_user_id, UserRole.provider)
-        provider = users_store[payload.provider_user_id]
+        provider = db.query(User).filter(
+            User.id == payload.provider_user_id,
+            User.role == UserRole.provider
+        ).first()
+        if not provider:
+            raise HTTPException(status_code=400, detail="Provider does not exist")
         appointment_data["provider_name"] = provider.full_name
     else:
-        # If no provider_user_id, try to find provider by name
-        provider_name = payload.provider_name
-        provider = next(
-            (u for u in users_store.values() if u.role == UserRole.provider and u.full_name == provider_name),
-            None
-        )
+        # Try to find provider by name
+        provider = db.query(User).filter(
+            User.role == UserRole.provider,
+            User.full_name == payload.provider_name
+        ).first()
         if provider:
             appointment_data["provider_user_id"] = provider.id
-    
-    # Randomly assign risk level for demo purposes (30% chance of being flagged)
+
+    # Randomly assign risk level (30% chance of being flagged)
     risk_roll = random.random()
     if risk_roll < 0.10:
         appointment_data["risk_level"] = RiskLevel.high
@@ -403,59 +388,105 @@ async def create_appointment(payload: AppointmentCreate):
         appointment_data["risk_level"] = RiskLevel.low
     else:
         appointment_data["risk_level"] = RiskLevel.none
-    
-    appointment_id = str(uuid4())
-    appointment = Appointment(id=appointment_id, **appointment_data)
-    appointments_store[appointment_id] = appointment
-    save_appointments()
+
+    # Create appointment
+    appointment = Appointment(
+        id=str(uuid4()),
+        **appointment_data,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+
+    db.add(appointment)
+    db.commit()
+    db.refresh(appointment)
+
     return appointment
 
 
-@app.patch("/api/appointments/{appointment_id}", response_model=Appointment)
-async def update_appointment(appointment_id: str, payload: AppointmentUpdate):
-    stored = appointments_store.get(appointment_id)
-    if not stored:
+@app.patch("/api/appointments/{appointment_id}", response_model=AppointmentResponse)
+async def update_appointment(
+    appointment_id: str,
+    payload: AppointmentUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update an existing appointment"""
+    appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+
+    if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
+
+    # Get update data (only fields that were provided)
     update_data = payload.model_dump(exclude_unset=True)
-    patient_id = update_data.get("patient_user_id")
-    provider_id = update_data.get("provider_user_id")
-    if patient_id:
-        assert_user_exists(patient_id, UserRole.patient)
-        update_data["patient_name"] = users_store[patient_id].full_name
-    if provider_id:
-        assert_user_exists(provider_id, UserRole.provider)
-        update_data["provider_name"] = users_store[provider_id].full_name
-    updated = stored.model_copy(update=update_data)
-    appointments_store[appointment_id] = updated
-    save_appointments()
-    return updated
+
+    # Validate patient_user_id if provided
+    if "patient_user_id" in update_data:
+        patient_id = update_data["patient_user_id"]
+        if patient_id:
+            patient = db.query(User).filter(
+                User.id == patient_id,
+                User.role == UserRole.patient
+            ).first()
+            if not patient:
+                raise HTTPException(status_code=400, detail="Patient does not exist")
+            appointment.patient_name = patient.full_name
+
+    # Validate provider_user_id if provided
+    if "provider_user_id" in update_data:
+        provider_id = update_data["provider_user_id"]
+        if provider_id:
+            provider = db.query(User).filter(
+                User.id == provider_id,
+                User.role == UserRole.provider
+            ).first()
+            if not provider:
+                raise HTTPException(status_code=400, detail="Provider does not exist")
+            appointment.provider_name = provider.full_name
+
+    # Update fields
+    for field, value in update_data.items():
+        setattr(appointment, field, value)
+
+    appointment.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(appointment)
+
+    return appointment
 
 
 @app.delete("/api/appointments/{appointment_id}", status_code=204)
-async def delete_appointment(appointment_id: str):
-    if appointment_id not in appointments_store:
+async def delete_appointment(appointment_id: str, db: Session = Depends(get_db)):
+    """Delete an appointment"""
+    appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+
+    if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    del appointments_store[appointment_id]
-    save_appointments()
+
+    db.delete(appointment)
+    db.commit()
+
     return None
 
 
 @app.get("/api/summary")
-async def summary():
-    appointments = list(appointments_store.values())
-    total = len(appointments)
-    scheduled = len(
-        [
-            a
-            for a in appointments
-            if a.status in {AppointmentStatus.scheduled, AppointmentStatus.rescheduled}
-        ]
-    )
-    cancelled = len([a for a in appointments if a.status == AppointmentStatus.cancelled])
-    completed = len([a for a in appointments if a.status == AppointmentStatus.completed])
+async def summary(db: Session = Depends(get_db)):
+    """Get summary statistics for provider analytics"""
+    all_appointments = db.query(Appointment).all()
+
+    total = len(all_appointments)
+    scheduled = len([
+        a for a in all_appointments
+        if a.status in {AppointmentStatus.scheduled, AppointmentStatus.rescheduled}
+    ])
+    cancelled = len([a for a in all_appointments if a.status == AppointmentStatus.cancelled])
+    completed = len([a for a in all_appointments if a.status == AppointmentStatus.completed])
+
     risk_counts = {
-        level.value: len([a for a in appointments if a.risk_level == level]) for level in RiskLevel
+        level.value: len([a for a in all_appointments if a.risk_level == level])
+        for level in RiskLevel
     }
+
     return {
         "total": total,
         "active": scheduled,
@@ -463,5 +494,3 @@ async def summary():
         "completed": completed,
         "risk_breakdown": risk_counts,
     }
-
-

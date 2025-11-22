@@ -22,4 +22,16 @@ wheels/
 .installed.cfg
 *.egg
 
+# Environment variables
+.env
+.env.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Old JSON data files (migrated to PostgreSQL)
+data/
+
 

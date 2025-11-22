@@ -144,7 +144,12 @@ export async function register(payload: RegisterPayload): Promise<User> {
   const response = await fetch(`${API_BASE}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      full_name: payload.fullName,
+      email: payload.email,
+      password: payload.password,
+      role: payload.role,
+    }),
   })
   const data = await handleResponse<BackendUser>(response)
   return toUser(data)
