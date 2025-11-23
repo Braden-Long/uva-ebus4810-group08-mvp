@@ -518,8 +518,8 @@ main {
 
 /* Better datetime-local input styling for 16:9 displays */
 .reschedule-row input[type="datetime-local"] {
-  font-size: 0.8125rem; /* Even smaller for datetime to prevent cutoff */
-  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem; /* Smaller to prevent PM cutoff */
+  padding: 0.5rem 0.5rem; /* Reduced padding for more space */
 }
 
 /* Ensure datetime input parts don't overflow */
@@ -530,6 +530,7 @@ main {
 .reschedule-row input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   padding: 0;
   margin-left: 0.25rem;
+  flex-shrink: 0;
 }
 
 .reschedule-row button {
