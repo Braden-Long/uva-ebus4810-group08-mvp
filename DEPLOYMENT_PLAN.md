@@ -79,7 +79,7 @@ Add these environment variables in Render dashboard:
 
 | Key | Value | Notes |
 |-----|-------|-------|
-| `DATABASE_URL` | `postgresql+psycopg://postgres.zqswpdgbljaztuhzvkol:syfnip-juGku2-kewhaw@aws-0-us-west-2.pooler.supabase.com:5432/postgres` | Your Supabase connection string |
+| `DATABASE_URL` | `postgresql+psycopg://[USER]:[PASSWORD]@[HOST]:5432/postgres` | Get from Supabase Dashboard → Settings → Database → Connection string (Session mode) |
 | `CORS_ORIGINS` | `https://your-app.netlify.app` | Update after deploying frontend (Step 3) |
 
 **Important:** Use the **Session pooler** connection string from Supabase (not the Transaction pooler) for better compatibility with Render's free tier.
