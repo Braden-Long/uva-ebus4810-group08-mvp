@@ -4,7 +4,7 @@ import AuthGate from './components/AuthGate'
 import PatientFlow from './components/PatientFlow'
 import ProviderFlow from './components/ProviderFlow'
 import { Appointment, AppointmentFormValues, AppointmentUpdatePayload, User } from './types'
-import { createAppointment, deleteAppointment, fetchAppointments, updateAppointment } from './api'
+import { createAppointment, deleteAppointment, fetchAppointments, updateAppointment, clearToken } from './api'
 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
@@ -64,6 +64,7 @@ function App() {
   }
 
   const handleLogout = () => {
+    clearToken()
     setCurrentUser(null)
     setAppointments([])
     setLastUpdated(null)

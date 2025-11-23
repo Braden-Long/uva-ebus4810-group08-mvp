@@ -33,6 +33,36 @@ interface BackendUser {
   created_at: string
 }
 
+interface BackendAuthResponse {
+  user: BackendUser
+  token: string
+}
+
+// Token storage helpers
+const TOKEN_KEY = 'auth_token'
+
+function saveToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
+function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
+// Helper to add auth header to requests
+function getAuthHeaders(): HeadersInit {
+  const token = getToken()
+  const headers: HeadersInit = { 'Content-Type': 'application/json' }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
+}
+
 const toUser = (payload: BackendUser): User => ({
   id: payload.id,
   fullName: payload.full_name,
@@ -97,6 +127,7 @@ export async function fetchAppointments(params?: {
 
   const response = await fetch(
     `${API_BASE}/api/appointments${query.toString() ? `?${query.toString()}` : ''}`,
+    { headers: getAuthHeaders() }
   )
   const data = await handleResponse<BackendAppointment[]>(response)
   return data.map(toFrontend)
@@ -105,7 +136,7 @@ export async function fetchAppointments(params?: {
 export async function createAppointment(payload: AppointmentFormValues): Promise<Appointment> {
   const response = await fetch(`${API_BASE}/api/appointments`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(toBackend(payload)),
   })
   const data = await handleResponse<BackendAppointment>(response)
@@ -118,7 +149,7 @@ export async function updateAppointment(
 ): Promise<Appointment> {
   const response = await fetch(`${API_BASE}/api/appointments/${appointmentId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(toBackend(payload)),
   })
   const data = await handleResponse<BackendAppointment>(response)
@@ -126,7 +157,9 @@ export async function updateAppointment(
 }
 
 export async function fetchSummary(): Promise<SummarySnapshot> {
-  const response = await fetch(`${API_BASE}/api/summary`)
+  const response = await fetch(`${API_BASE}/api/summary`, {
+    headers: getAuthHeaders()
+  })
   return handleResponse<SummarySnapshot>(response)
 }
 
@@ -136,8 +169,9 @@ export async function login(payload: LoginPayload): Promise<User> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  const data = await handleResponse<BackendUser>(response)
-  return toUser(data)
+  const data = await handleResponse<BackendAuthResponse>(response)
+  saveToken(data.token)
+  return toUser(data.user)
 }
 
 export async function register(payload: RegisterPayload): Promise<User> {
@@ -151,13 +185,15 @@ export async function register(payload: RegisterPayload): Promise<User> {
       role: payload.role,
     }),
   })
-  const data = await handleResponse<BackendUser>(response)
-  return toUser(data)
+  const data = await handleResponse<BackendAuthResponse>(response)
+  saveToken(data.token)
+  return toUser(data.user)
 }
 
 export async function deleteAppointment(appointmentId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/appointments/${appointmentId}`, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
   })
   if (!response.ok) {
     const message = await response.text()
@@ -171,6 +207,7 @@ export async function fetchUsers(role?: 'patient' | 'provider'): Promise<User[]>
 
   const response = await fetch(
     `${API_BASE}/api/users${query.toString() ? `?${query.toString()}` : ''}`,
+    { headers: getAuthHeaders() }
   )
   const data = await handleResponse<BackendUser[]>(response)
   return data.map(toUser)
