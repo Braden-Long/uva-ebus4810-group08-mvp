@@ -165,4 +165,15 @@ export async function deleteAppointment(appointmentId: string): Promise<void> {
   }
 }
 
+export async function fetchUsers(role?: 'patient' | 'provider'): Promise<User[]> {
+  const query = new URLSearchParams()
+  if (role) query.append('role', role)
+
+  const response = await fetch(
+    `${API_BASE}/api/users${query.toString() ? `?${query.toString()}` : ''}`,
+  )
+  const data = await handleResponse<BackendUser[]>(response)
+  return data.map(toUser)
+}
+
 

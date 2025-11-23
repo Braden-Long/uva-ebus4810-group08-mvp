@@ -303,6 +303,16 @@ async def login_user(payload: LoginPayload, db: Session = Depends(get_db)):
     return user
 
 
+@app.get("/api/users", response_model=List[UserPublic])
+async def list_users(role: Optional[UserRole] = None, db: Session = Depends(get_db)):
+    """Get list of users, optionally filtered by role"""
+    query = db.query(User)
+    if role:
+        query = query.filter(User.role == role)
+    users = query.order_by(User.full_name).all()
+    return users
+
+
 @app.get("/api/appointments", response_model=List[AppointmentResponse])
 async def list_appointments(
     status: Optional[AppointmentStatus] = None,

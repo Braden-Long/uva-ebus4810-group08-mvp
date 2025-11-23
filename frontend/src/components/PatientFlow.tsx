@@ -5,6 +5,7 @@ import {
   AppointmentUpdatePayload,
   User,
 } from '../types'
+import { fetchUsers } from '../api'
 
 interface PatientFlowProps {
   currentUser: User
@@ -13,21 +14,6 @@ interface PatientFlowProps {
   onCreate: (payload: AppointmentFormValues) => Promise<void>
   onUpdate: (id: string, payload: AppointmentUpdatePayload) => Promise<void>
 }
-
-const providerDirectory = [
-  {
-    name: 'Dr. Sarah Mitchell',
-    location: 'UVA Neurology - Pavilion II',
-  },
-  {
-    name: 'Dr. James Cooper',
-    location: 'UVA Surgical Center',
-  },
-  {
-    name: 'Dr. Rachel Thompson',
-    location: 'Virtual Care Team',
-  },
-]
 
 const formatDateTime = (isoDate: string) =>
   new Intl.DateTimeFormat('en-US', {
@@ -51,13 +37,15 @@ const defaultAppointmentISO = () => {
 }
 
 const PatientFlow = ({ currentUser, appointments, loading, onCreate, onUpdate }: PatientFlowProps) => {
+  const [providers, setProviders] = useState<User[]>([])
+  const [providersLoading, setProvidersLoading] = useState(true)
   const [formValues, setFormValues] = useState<AppointmentFormValues>({
     patientName: currentUser.fullName,
     patientUserId: currentUser.id,
-    providerName: providerDirectory[0].name,
+    providerName: '',
     appointmentTime: defaultAppointmentISO(),
     reason: 'Specialist follow-up',
-    location: providerDirectory[0].location,
+    location: '',
     channel: 'in-person',
     notes: 'Prefers SMS reminders',
   })
@@ -72,6 +60,27 @@ const PatientFlow = ({ currentUser, appointments, loading, onCreate, onUpdate }:
       patientUserId: currentUser.id,
     }))
   }, [currentUser])
+
+  useEffect(() => {
+    const loadProviders = async () => {
+      try {
+        const providerList = await fetchUsers('provider')
+        setProviders(providerList)
+        // Set first provider as default if available
+        if (providerList.length > 0) {
+          setFormValues((prev) => ({
+            ...prev,
+            providerName: providerList[0].fullName,
+          }))
+        }
+      } catch (error) {
+        console.error('Failed to load providers:', error)
+      } finally {
+        setProvidersLoading(false)
+      }
+    }
+    loadProviders()
+  }, [])
 
   const sortedAppointments = useMemo(
     () =>
@@ -95,15 +104,6 @@ const PatientFlow = ({ currentUser, appointments, loading, onCreate, onUpdate }:
   )
 
   const handleInput = (field: keyof AppointmentFormValues, value: string) => {
-    if (field === 'providerName') {
-      const provider = providerDirectory.find((p) => p.name === value)
-      setFormValues((prev) => ({
-        ...prev,
-        providerName: value,
-        location: provider?.location ?? prev.location,
-      }))
-      return
-    }
     if (field === 'appointmentTime') {
       const isoValue = new Date(value).toISOString()
       setFormValues((prev) => ({ ...prev, appointmentTime: isoValue }))
@@ -193,12 +193,19 @@ const PatientFlow = ({ currentUser, appointments, loading, onCreate, onUpdate }:
             <select
               value={formValues.providerName}
               onChange={(e) => handleInput('providerName', e.target.value)}
+              disabled={providersLoading}
             >
-              {providerDirectory.map((provider) => (
-                <option key={provider.name} value={provider.name}>
-                  {provider.name}
-                </option>
-              ))}
+              {providersLoading ? (
+                <option>Loading providers...</option>
+              ) : providers.length === 0 ? (
+                <option>No providers available</option>
+              ) : (
+                providers.map((provider) => (
+                  <option key={provider.id} value={provider.fullName}>
+                    {provider.fullName}
+                  </option>
+                ))
+              )}
             </select>
           </label>
           <label>
