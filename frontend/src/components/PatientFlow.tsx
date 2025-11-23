@@ -245,29 +245,23 @@ const PatientFlow = ({ currentUser, appointments, loading, onCreate, onUpdate }:
             />
           </label>
           <div className="form-actions">
-            <div className="channel-toggle">
-              <label>
-                <input
-                  type="radio"
-                  name="channel"
-                  value="in-person"
-                  checked={formValues.channel === 'in-person'}
-                  onChange={(e) => handleInput('channel', e.target.value)}
-                />
+            <div className="view-toggle">
+              <button
+                type="button"
+                className={formValues.channel === 'in-person' ? 'toggle-btn active' : 'toggle-btn'}
+                onClick={() => handleInput('channel', 'in-person')}
+              >
                 In-person
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="channel"
-                  value="virtual"
-                  checked={formValues.channel === 'virtual'}
-                  onChange={(e) => handleInput('channel', e.target.value)}
-                />
+              </button>
+              <button
+                type="button"
+                className={formValues.channel === 'virtual' ? 'toggle-btn active' : 'toggle-btn'}
+                onClick={() => handleInput('channel', 'virtual')}
+              >
                 Virtual
-              </label>
+              </button>
             </div>
-            <button type="submit" disabled={formBusy}>
+            <button type="submit" className="primary-button" disabled={formBusy}>
               {formBusy ? 'Submitting…' : 'Request appointment'}
             </button>
           </div>
