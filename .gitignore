@@ -27,4 +27,7 @@ build/
 *.swo
 .DS_Store
 
+# AI assistant files
+CLAUDE.md
+
 
