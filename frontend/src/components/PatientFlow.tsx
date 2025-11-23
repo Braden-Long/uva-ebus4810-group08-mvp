@@ -6,6 +6,7 @@ import {
   User,
 } from '../types'
 import { fetchUsers } from '../api'
+import CustomSelect from './CustomSelect'
 
 interface PatientFlowProps {
   currentUser: User
@@ -190,23 +191,16 @@ const PatientFlow = ({ currentUser, appointments, loading, onCreate, onUpdate }:
         <form onSubmit={handleSubmit} className="grid-form">
           <label>
             Preferred provider
-            <select
+            <CustomSelect
               value={formValues.providerName}
-              onChange={(e) => handleInput('providerName', e.target.value)}
-              disabled={providersLoading}
-            >
-              {providersLoading ? (
-                <option>Loading providers...</option>
-              ) : providers.length === 0 ? (
-                <option>No providers available</option>
-              ) : (
-                providers.map((provider) => (
-                  <option key={provider.id} value={provider.fullName}>
-                    {provider.fullName}
-                  </option>
-                ))
-              )}
-            </select>
+              onChange={(value) => handleInput('providerName', value)}
+              options={providers.map((provider) => ({
+                value: provider.fullName,
+                label: provider.fullName,
+              }))}
+              placeholder={providersLoading ? 'Loading providers...' : providers.length === 0 ? 'No providers available' : 'Select a provider'}
+              disabled={providersLoading || providers.length === 0}
+            />
           </label>
           <label>
             Visit date &amp; time
