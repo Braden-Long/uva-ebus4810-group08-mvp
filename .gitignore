@@ -9,6 +9,11 @@ venv/
 ENV/
 *.egg-info/
 
+# Environment variables
+.env
+.env.local
+.env.*.local
+
 # Node
 node_modules/
 npm-debug.log*
