@@ -11,6 +11,7 @@ from passlib.context import CryptContext
 
 from database import engine, get_db, Base
 from models import User, Appointment, UserRole, RiskLevel, AppointmentStatus
+from auth import create_access_token, get_current_user
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -52,6 +53,12 @@ class LoginPayload(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6)
     role: UserRole
+
+
+class AuthResponse(BaseModel):
+    """Response model for login/register with JWT token"""
+    user: UserPublic
+    token: str
 
 
 class AppointmentBase(BaseModel):
@@ -261,7 +268,7 @@ async def health(db: Session = Depends(get_db)):
     }
 
 
-@app.post("/api/auth/register", response_model=UserPublic, status_code=201)
+@app.post("/api/auth/register", response_model=AuthResponse, status_code=201)
 async def register_user(payload: RegisterPayload, db: Session = Depends(get_db)):
     """Register a new user (patient or provider)"""
     email = payload.email.lower()
@@ -284,12 +291,19 @@ async def register_user(payload: RegisterPayload, db: Session = Depends(get_db))
     db.commit()
     db.refresh(user)
 
-    return user
+    # Generate JWT token
+    token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role.value
+    )
+
+    return {"user": user, "token": token}
 
 
-@app.post("/api/auth/login", response_model=UserPublic)
+@app.post("/api/auth/login", response_model=AuthResponse)
 async def login_user(payload: LoginPayload, db: Session = Depends(get_db)):
-    """Authenticate user and return user info"""
+    """Authenticate user and return user info with JWT token"""
     user = get_user_by_email(db, payload.email)
 
     # Check user exists and role matches
@@ -300,12 +314,23 @@ async def login_user(payload: LoginPayload, db: Session = Depends(get_db)):
     if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return user
+    # Generate JWT token
+    token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role.value
+    )
+
+    return {"user": user, "token": token}
 
 
 @app.get("/api/users", response_model=List[UserPublic])
-async def list_users(role: Optional[UserRole] = None, db: Session = Depends(get_db)):
-    """Get list of users, optionally filtered by role"""
+async def list_users(
+    role: Optional[UserRole] = None,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get list of users, optionally filtered by role (requires authentication)"""
     query = db.query(User)
     if role:
         query = query.filter(User.role == role)
@@ -319,9 +344,10 @@ async def list_appointments(
     risk: Optional[RiskLevel] = None,
     patient_id: Optional[str] = None,
     provider_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List appointments with optional filters"""
+    """List appointments with optional filters (requires authentication)"""
     query = db.query(Appointment)
 
     if status:
@@ -339,8 +365,12 @@ async def list_appointments(
 
 
 @app.get("/api/appointments/{appointment_id}", response_model=AppointmentResponse)
-async def get_appointment(appointment_id: str, db: Session = Depends(get_db)):
-    """Get a single appointment by ID"""
+async def get_appointment(
+    appointment_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a single appointment by ID (requires authentication)"""
     appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
 
     if not appointment:
@@ -350,8 +380,12 @@ async def get_appointment(appointment_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/appointments", response_model=AppointmentResponse, status_code=201)
-async def create_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)):
-    """Create a new appointment"""
+async def create_appointment(
+    payload: AppointmentCreate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new appointment (requires authentication)"""
     appointment_data = payload.model_dump()
 
     # Validate and link patient user
@@ -412,9 +446,10 @@ async def create_appointment(payload: AppointmentCreate, db: Session = Depends(g
 async def update_appointment(
     appointment_id: str,
     payload: AppointmentUpdate,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update an existing appointment"""
+    """Update an existing appointment (requires authentication)"""
     appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
 
     if not appointment:
@@ -460,8 +495,12 @@ async def update_appointment(
 
 
 @app.delete("/api/appointments/{appointment_id}", status_code=204)
-async def delete_appointment(appointment_id: str, db: Session = Depends(get_db)):
-    """Delete an appointment"""
+async def delete_appointment(
+    appointment_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete an appointment (requires authentication)"""
     appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
 
     if not appointment:
@@ -474,8 +513,11 @@ async def delete_appointment(appointment_id: str, db: Session = Depends(get_db))
 
 
 @app.get("/api/summary")
-async def summary(db: Session = Depends(get_db)):
-    """Get summary statistics for provider analytics"""
+async def summary(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get summary statistics for provider analytics (requires authentication)"""
     all_appointments = db.query(Appointment).all()
 
     total = len(all_appointments)
