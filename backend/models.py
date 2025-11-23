@@ -37,7 +37,6 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     role = Column(SQLEnum(UserRole), nullable=False)
     password_hash = Column(String(255), nullable=False)
-    email_verified = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
