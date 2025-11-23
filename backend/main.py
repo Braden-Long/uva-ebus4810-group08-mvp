@@ -165,7 +165,6 @@ def bootstrap_demo_data(db: Session):
             email=user_data["email"].lower(),
             role=user_data["role"],
             password_hash=hash_password(user_data["password"]),
-            email_verified=True,  # Demo accounts are pre-verified
             created_at=now,
         )
         db.add(user)
@@ -278,7 +277,6 @@ async def register_user(payload: RegisterPayload, db: Session = Depends(get_db))
         email=email,
         role=payload.role,
         password_hash=hash_password(payload.password),
-        email_verified=False,  # Will be verified via email in next commit
         created_at=datetime.utcnow(),
     )
 
@@ -301,10 +299,6 @@ async def login_user(payload: LoginPayload, db: Session = Depends(get_db)):
     # Verify password
     if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    # TODO: In next commit, check email_verified status
-    # if not user.email_verified:
-    #     raise HTTPException(status_code=403, detail="Email not verified")
 
     return user
 
