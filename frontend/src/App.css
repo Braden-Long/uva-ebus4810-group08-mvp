@@ -500,11 +500,12 @@ main {
 
 .reschedule-row input {
   flex: 1;
+  min-width: 0; /* Allows flex item to shrink below content size */
   padding: 0.625rem 0.875rem;
   border: 1px solid var(--border);
   border-radius: 0.375rem;
   font-family: inherit;
-  font-size: 0.9375rem;
+  font-size: 0.875rem; /* Reduced from 0.9375rem for better fit */
   background: var(--surface);
   color: var(--text);
   transition: border-color 0.15s;
@@ -513,6 +514,22 @@ main {
 .reschedule-row input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Better datetime-local input styling for 16:9 displays */
+.reschedule-row input[type="datetime-local"] {
+  font-size: 0.8125rem; /* Even smaller for datetime to prevent cutoff */
+  padding: 0.5rem 0.75rem;
+}
+
+/* Ensure datetime input parts don't overflow */
+.reschedule-row input[type="datetime-local"]::-webkit-datetime-edit {
+  padding: 0;
+}
+
+.reschedule-row input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  padding: 0;
+  margin-left: 0.25rem;
 }
 
 .reschedule-row button {
